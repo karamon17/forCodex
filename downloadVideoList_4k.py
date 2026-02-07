@@ -13,9 +13,9 @@ def progress_hook(d):
         print("\n✅ Скачано. Склейка/обработка...")
 
 
-def is_https(fmt: dict) -> bool:
+def is_supported_protocol(fmt: dict) -> bool:
     proto = (fmt.get("protocol") or "").lower()
-    return proto.startswith("https")
+    return proto.startswith("https") or proto.startswith("m3u8")
 
 
 def safe_int(x, default=0):
@@ -76,7 +76,7 @@ def pick_best_formats(formats: list[dict], max_height: int):
         acodec = (f.get("acodec") or "none").lower()
         height = safe_int(f.get("height"), 0)
 
-        if not is_https(f):
+        if not is_supported_protocol(f):
             continue
 
         if any(b in vcodec for b in BANNED_VCODECS):
@@ -148,6 +148,8 @@ base_opts = {
     # YouTube JS challenge (n-param) solving via node + remote ejs component.
     "js_runtimes": {"node": {}},
     "remote_components": ["ejs:github"],
+    # Prefer clients that often avoid n-challenge failures.
+    "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
 
     "merge_output_format": "mkv",
     "progress_hooks": [progress_hook],
@@ -155,6 +157,8 @@ base_opts = {
     "retries": 20,
     "fragment_retries": 50,
     "concurrent_fragment_downloads": 1,
+    "source_address": "0.0.0.0",
+    "socket_timeout": 30,
 
     "quiet": not VERBOSE,
     "no_warnings": False,
@@ -171,10 +175,21 @@ def download_url(url: str, index: int, total: int):
     extract_opts["skip_download"] = True
 
     with yt_dlp.YoutubeDL(extract_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+        try:
+            info = ydl.extract_info(url, download=False)
+        except yt_dlp.utils.DownloadError as e:
+            raise RuntimeError(
+                "Не удалось получить форматы у YouTube. Проверь cookies и обнови cookies.txt."
+            ) from e
 
     title = sanitize_filename(info.get("title") or f"video_{index}")
     formats = info.get("formats") or []
+    protocols = {(f.get("protocol") or "").lower() for f in formats}
+    if protocols == {"m3u8_native"}:
+        print(
+            "[INFO] YouTube отдал только m3u8-потоки. "
+            "Обычно это bot-check / n-challenge: часть форматов недоступна."
+        )
     v_id, a_id, p_id = pick_best_formats(formats, max_height=MAX_HEIGHT)
 
     if v_id and a_id:
@@ -192,7 +207,29 @@ def download_url(url: str, index: int, total: int):
     dl_opts["outtmpl"] = os.path.join(OUT_DIR, f"{title}.%(ext)s")
 
     with yt_dlp.YoutubeDL(dl_opts) as ydl:
-        ydl.download([url])
+        try:
+            ydl.download([url])
+        except yt_dlp.utils.DownloadError as e:
+            msg = str(e).lower()
+            if "http error 403" in msg or "requested format is not available" in msg:
+                raise RuntimeError(
+                    "YouTube отклоняет медиапоток (403). "
+                    "Обычно это устаревшие cookies или недоступный n/po-token. "
+                    "Обнови cookies.txt из того же браузера/профиля."
+                ) from e
+            if "downloaded file is empty" in msg or "unexpected_eof_while_reading" in msg or "ssl" in msg:
+                print("⚠️ Сетевая ошибка на основном формате, пробую безопасный fallback...")
+                safe_opts = dict(base_opts)
+                safe_opts["format"] = (
+                    f"best[ext=mp4][height<={MAX_HEIGHT}]"
+                    f"/best[height<={MAX_HEIGHT}]"
+                    "/best"
+                )
+                safe_opts["outtmpl"] = os.path.join(OUT_DIR, f"{title}.%(ext)s")
+                with yt_dlp.YoutubeDL(safe_opts) as retry_ydl:
+                    retry_ydl.download([url])
+            else:
+                raise
 
     print("✅ Готово:", title)
 

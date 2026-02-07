@@ -104,6 +104,12 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(errors="replace")
 
 base_opts = {
+    # YouTube JS challenge (n-param) solving via node + remote ejs component.
+    "js_runtimes": {"node": {}},
+    "remote_components": ["ejs:github"],
+    # Prefer clients that often avoid n-challenge failures.
+    "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+
     "outtmpl": os.path.join(OUT_DIR, "%(title)s.%(ext)s"),
 
     # ✅ для 4K (vp9/webm) надёжнее мерджить в mkv
