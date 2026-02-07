@@ -107,8 +107,6 @@ base_opts = {
     # YouTube JS challenge (n-param) solving via node + remote ejs component.
     "js_runtimes": {"node": {}},
     "remote_components": ["ejs:github"],
-    # Prefer clients that often avoid n-challenge failures.
-    "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
 
     "outtmpl": os.path.join(OUT_DIR, "%(title)s.%(ext)s"),
 
