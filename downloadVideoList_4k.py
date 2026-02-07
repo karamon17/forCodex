@@ -145,8 +145,9 @@ VERBOSE = False
 os.makedirs(OUT_DIR, exist_ok=True)
 
 base_opts = {
+    # YouTube JS challenge (n-param) solving via node + remote ejs component.
     "js_runtimes": {"node": {}},
-    "remote_components": {"ejs": "github"},
+    "remote_components": ["ejs:github"],
 
     "merge_output_format": "mkv",
     "progress_hooks": [progress_hook],
@@ -157,10 +158,6 @@ base_opts = {
 
     "quiet": not VERBOSE,
     "no_warnings": False,
-
-        # EJS / n-challenge:
-    "js_runtimes": {"node": {}},
-    "remote_components": {"ejs": "github"}, 
 }
 
 if COOKIES_PATH:
@@ -213,4 +210,3 @@ for i, u in enumerate(urls, start=1):
         print(f"\n❌ Ошибка на {u}\n{repr(e)}")
 
 print(f"\n\nИтог: ✅ {ok} | ❌ {fail} | всего {total}")
-ммм
